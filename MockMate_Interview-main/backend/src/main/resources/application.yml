@@ -1,5 +1,5 @@
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 spring:
   data:
@@ -11,11 +11,7 @@ spring:
 
 app:
   jwt:
-    # Hinglish: yahin JWT secret change karna hai production deploy ke time.
     secret: ${JWT_SECRET:mockmate-super-secret-key-change-this-before-production-1234567890}
     expiration-hours: 24
   matchmaking:
     poll-ms: 1500
-
-# Hinglish: agar frontend kisi aur domain/port par chal raha ho,
-# to CORS aur WebSocket allowed origins SecurityConfig/WebSocketConfig me update karo.

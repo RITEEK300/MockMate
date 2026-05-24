@@ -8,7 +8,7 @@ import type {
 } from '../types';
 
 // Hinglish: backend API URL change karna ho to `.env` ya `VITE_API_BASE_URL` yahin se control hota hai.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://mockmate-production-abaa.up.railway.app';
 
 async function apiFetch<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
