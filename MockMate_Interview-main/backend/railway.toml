@@ -1,9 +1,9 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "cd MockMate_Interview-main/backend && mvn clean package -DskipTests"
+buildCommand = "mvn clean package -DskipTests"
 
 [deploy]
-startCommand = "cd MockMate_Interview-main/backend && java -jar target/*.jar"
+startCommand = "java -jar target/*.jar"
 healthcheckPath = "/api/health"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
