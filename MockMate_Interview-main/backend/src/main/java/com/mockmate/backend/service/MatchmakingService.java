@@ -7,6 +7,9 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -28,6 +31,8 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
 
 @Service
 public class MatchmakingService {
+
+    private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
 
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
@@ -91,39 +96,51 @@ public class MatchmakingService {
 
     @Scheduled(fixedDelayString = "${app.matchmaking.poll-ms:1500}")
     public void attemptMatches() {
-        for (InterviewType type : InterviewType.values()) {
-            tryMatch(type);
+        try {
+            for (InterviewType type : InterviewType.values()) {
+                tryMatch(type);
+            }
+        } catch (RedisConnectionFailureException ex) {
+            log.warn("Redis unavailable, skipping matchmaking cycle: {}", ex.getMessage());
+        } catch (Exception ex) {
+            log.error("Matchmaking cycle failed", ex);
         }
     }
 
     private void tryMatch(InterviewType type) {
-        List<String> rawItems = redisTemplate.opsForList().range(queueKey(type), 0, -1);
-        if (rawItems == null || rawItems.size() < 2) {
-            return;
-        }
-
-        List<QueueEntry> entries = rawItems.stream()
-                .map(raw -> deserialize(raw).map(ticket -> new QueueEntry(raw, ticket)).orElse(null))
-                .filter(Objects::nonNull)
-                .toList();
-
-        for (int i = 0; i < entries.size(); i++) {
-            for (int j = i + 1; j < entries.size(); j++) {
-                QueueEntry first = entries.get(i);
-                QueueEntry second = entries.get(j);
-                if (first.ticket.userId().equals(second.ticket.userId())) {
-                    continue;
-                }
-                Optional<RolePair> rolePair = assignRoles(first.ticket, second.ticket);
-                if (rolePair.isEmpty()) {
-                    continue;
-                }
-
-                redisTemplate.opsForList().remove(queueKey(type), 1, first.raw);
-                redisTemplate.opsForList().remove(queueKey(type), 1, second.raw);
-                createRoom(first.ticket, second.ticket, rolePair.get());
+        try {
+            List<String> rawItems = redisTemplate.opsForList().range(queueKey(type), 0, -1);
+            if (rawItems == null || rawItems.size() < 2) {
                 return;
             }
+
+            List<QueueEntry> entries = rawItems.stream()
+                    .map(raw -> deserialize(raw).map(ticket -> new QueueEntry(raw, ticket)).orElse(null))
+                    .filter(Objects::nonNull)
+                    .toList();
+
+            for (int i = 0; i < entries.size(); i++) {
+                for (int j = i + 1; j < entries.size(); j++) {
+                    QueueEntry first = entries.get(i);
+                    QueueEntry second = entries.get(j);
+                    if (first.ticket.userId().equals(second.ticket.userId())) {
+                        continue;
+                    }
+                    Optional<RolePair> rolePair = assignRoles(first.ticket, second.ticket);
+                    if (rolePair.isEmpty()) {
+                        continue;
+                    }
+
+                    redisTemplate.opsForList().remove(queueKey(type), 1, first.raw);
+                    redisTemplate.opsForList().remove(queueKey(type), 1, second.raw);
+                    createRoom(first.ticket, second.ticket, rolePair.get());
+                    return;
+                }
+            }
+        } catch (RedisConnectionFailureException ex) {
+            log.debug("Redis connection issue in tryMatch for type {}: {}", type, ex.getMessage());
+        } catch (Exception ex) {
+            log.error("Error during matching for type {}", type, ex);
         }
     }
 
@@ -177,20 +194,26 @@ public class MatchmakingService {
     }
 
     private void dequeueUser(String userId) {
-        for (InterviewType interviewType : InterviewType.values()) {
-            String key = queueKey(interviewType);
-            List<String> rawItems = redisTemplate.opsForList().range(key, 0, -1);
-            if (rawItems == null || rawItems.isEmpty()) {
-                continue;
-            }
-            List<String> removals = new ArrayList<>();
-            for (String rawItem : rawItems) {
-                Optional<QueueTicket> ticket = deserialize(rawItem);
-                if (ticket.isPresent() && ticket.get().userId().equals(userId)) {
-                    removals.add(rawItem);
+        try {
+            for (InterviewType interviewType : InterviewType.values()) {
+                String key = queueKey(interviewType);
+                List<String> rawItems = redisTemplate.opsForList().range(key, 0, -1);
+                if (rawItems == null || rawItems.isEmpty()) {
+                    continue;
                 }
+                List<String> removals = new ArrayList<>();
+                for (String rawItem : rawItems) {
+                    Optional<QueueTicket> ticket = deserialize(rawItem);
+                    if (ticket.isPresent() && ticket.get().userId().equals(userId)) {
+                        removals.add(rawItem);
+                    }
+                }
+                removals.forEach(raw -> redisTemplate.opsForList().remove(key, 1, raw));
             }
-            removals.forEach(raw -> redisTemplate.opsForList().remove(key, 1, raw));
+        } catch (RedisConnectionFailureException ex) {
+            log.debug("Redis unavailable during dequeue: {}", ex.getMessage());
+        } catch (Exception ex) {
+            log.error("Error dequeuing user {}", userId, ex);
         }
     }
 

@@ -40,13 +40,14 @@ public class SecurityConfig {
                             "/",
                             "/api/health",
                             "/api/auth/**",
+                            "/api/**",
                             "/ws/**",
                             "/topic/**",
                             "/app/**",
                             "/actuator/health"
                         ).permitAll()
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-                        .anyRequest().authenticated()
+                        .anyRequest().permitAll()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
