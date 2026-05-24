@@ -10,7 +10,8 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:mockmate-super-secret-key-change-this-before-production-1234567890}
+    secret: ${JWT_SECRET:mockmate-dev-secret-change-this}
     expiration-hours: 24
+  dev-reset-enabled: ${DEV_RESET_ENABLED:false}
   matchmaking:
     poll-ms: 1500
