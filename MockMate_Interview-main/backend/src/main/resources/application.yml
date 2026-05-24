@@ -1,0 +1,21 @@
+server:
+  port: 8080
+
+spring:
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/mockmate}
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+app:
+  jwt:
+    # Hinglish: yahin JWT secret change karna hai production deploy ke time.
+    secret: ${JWT_SECRET:mockmate-super-secret-key-change-this-before-production-1234567890}
+    expiration-hours: 24
+  matchmaking:
+    poll-ms: 1500
+
+# Hinglish: agar frontend kisi aur domain/port par chal raha ho,
+# to CORS aur WebSocket allowed origins SecurityConfig/WebSocketConfig me update karo.

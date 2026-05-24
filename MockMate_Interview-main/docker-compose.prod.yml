@@ -1,0 +1,99 @@
+version: '3.9'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: mockmate-redis
+    ports:
+      - "6379:6379"
+    restart: always
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mockmate-network
+
+  mongo:
+    image: mongo:7
+    container_name: mockmate-mongo
+    ports:
+      - "27017:27017"
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    environment:
+      MONGO_INITDB_DATABASE: mockmate
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mockmate-network
+
+  backend:
+    image: mockmate-backend:latest
+    container_name: mockmate-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    restart: always
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      MONGODB_URI: mongodb://mongo:27017/mockmate
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SPRING_PROFILES_ACTIVE: prod
+      SERVER_PORT: 8080
+    depends_on:
+      redis:
+        condition: service_healthy
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - mockmate-network
+    labels:
+      - "com.example.description=MockMate Backend API"
+
+  frontend:
+    image: mockmate-frontend:latest
+    container_name: mockmate-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8080}
+        VITE_WEBSOCKET_URL: ${VITE_WEBSOCKET_URL:-ws://localhost:8080}
+    ports:
+      - "3000:80"
+    restart: always
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - mockmate-network
+    labels:
+      - "com.example.description=MockMate Frontend"
+
+volumes:
+  redis_data:
+  mongo_data:
+
+networks:
+  mockmate-network:
+    driver: bridge
