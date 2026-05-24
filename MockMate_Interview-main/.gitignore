@@ -5,3 +5,11 @@ frontend/dist/
 .vscode/
 *.log
 .DS_Store
+.env
+.env.local
+.env.*.local
+application-secrets.yml
+application-local.yml
+target/
+node_modules/
+dist/
