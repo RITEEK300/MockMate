@@ -2,6 +2,8 @@ package com.mockmate.backend.service;
 
 import java.time.Instant;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -14,10 +16,13 @@ import com.mockmate.backend.repository.UserRepository;
 import com.mockmate.backend.security.JwtService;
 
 import static org.springframework.http.HttpStatus.BAD_REQUEST;
+import static org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR;
 import static org.springframework.http.HttpStatus.UNAUTHORIZED;
 
 @Service
 public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -30,29 +35,56 @@ public class AuthService {
     }
 
     public AuthResponse signup(SignupRequest request) {
-        if (userRepository.existsByEmailIgnoreCase(request.email())) {
-            throw new ResponseStatusException(BAD_REQUEST, "Email already in use");
-        }
+        try {
+            String normalizedEmail = request.email().trim().toLowerCase();
 
-        User user = new User(
-                request.name().trim(),
-                request.email().trim().toLowerCase(),
-                passwordEncoder.encode(request.password()),
-                Instant.now()
-        );
-        User saved = userRepository.save(user);
-        return buildResponse(saved);
+            if (userRepository.existsByEmailIgnoreCase(normalizedEmail)) {
+                log.warn("Signup attempt with existing email: {}", normalizedEmail);
+                throw new ResponseStatusException(BAD_REQUEST, "Email already in use");
+            }
+
+            User user = new User(
+                    request.name().trim(),
+                    normalizedEmail,
+                    passwordEncoder.encode(request.password()),
+                    Instant.now()
+            );
+            User saved = userRepository.save(user);
+            log.info("User signed up successfully: {}", saved.getId());
+            return buildResponse(saved);
+
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Signup failed: {}", ex.getMessage(), ex);
+            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Signup failed: " + ex.getMessage());
+        }
     }
 
     public AuthResponse login(AuthRequest request) {
-        User user = userRepository.findByEmailIgnoreCase(request.email().trim())
-                .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Invalid email or password"));
+        try {
+            String normalizedEmail = request.email().trim().toLowerCase();
 
-        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
-            throw new ResponseStatusException(UNAUTHORIZED, "Invalid email or password");
+            User user = userRepository.findByEmailIgnoreCase(normalizedEmail)
+                    .orElseThrow(() -> {
+                        log.warn("Login attempt with non-existent email: {}", normalizedEmail);
+                        return new ResponseStatusException(UNAUTHORIZED, "Invalid email or password");
+                    });
+
+            if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+                log.warn("Login attempt with wrong password for email: {}", normalizedEmail);
+                throw new ResponseStatusException(UNAUTHORIZED, "Invalid email or password");
+            }
+
+            log.info("User logged in successfully: {}", user.getId());
+            return buildResponse(user);
+
+        } catch (ResponseStatusException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            log.error("Login failed: {}", ex.getMessage(), ex);
+            throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "Login failed: " + ex.getMessage());
         }
-
-        return buildResponse(user);
     }
 
     private AuthResponse buildResponse(User user) {

@@ -5,6 +5,7 @@ spring:
   data:
     mongodb:
       uri: ${MONGODB_URI:mongodb://localhost:27017/mockmate}
+      database: ${MONGODB_DATABASE:mockmate}
     redis:
       url: ${REDIS_URL:redis://localhost:6379}
 
