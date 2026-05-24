@@ -46,17 +46,28 @@ public class DbResetService {
             }
         }
 
-        log.info("Clearing Redis matchmaking queues...");
-        try {
-            Set<String> keysToDelete = redisTemplate.keys("mockmate:queue:*");
-            if (keysToDelete != null && !keysToDelete.isEmpty()) {
-                redisTemplate.delete(keysToDelete);
-                log.info("Cleared {} Redis queue keys", keysToDelete.size());
-            }
-        } catch (Exception ex) {
-            log.error("Failed to clear Redis queues: {}", ex.getMessage());
-        }
+        clearRedisQueues();
 
         log.info("Database reset completed");
+    }
+
+    private void clearRedisQueues() {
+        log.info("Clearing Redis matchmaking queues...");
+        try {
+            if (redisTemplate == null || redisTemplate.getConnectionFactory() == null) {
+                log.warn("Redis not available, skipping queue cleanup");
+                return;
+            }
+
+            Set<String> keysToDelete = redisTemplate.keys("mockmate:queue:*");
+            if (keysToDelete != null && !keysToDelete.isEmpty()) {
+                Long deletedCount = redisTemplate.delete(keysToDelete);
+                log.info("Cleared {} Redis queue keys", deletedCount);
+            } else {
+                log.info("No Redis queue keys found to delete");
+            }
+        } catch (Exception ex) {
+            log.warn("Redis cleanup failed (non-critical): {}", ex.getMessage());
+        }
     }
 }
